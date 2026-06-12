@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7EVEN Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── RESET & BASE ── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#070707;color:#fff;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#000}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:4px}
+input,select,textarea,button{font-family:inherit}
+button{cursor:pointer}
+
+/* ── CONFIG ── */
+#config-screen{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;z-index:999;padding:24px}
+.config-box{width:min(440px,96vw);background:rgba(255,255,255,0.04);backdrop-filter:blur(24px);border:0.5px solid rgba(255,255,255,0.1);border-radius:24px;padding:36px 32px}
+.config-logo{font-family:monospace;font-size:20px;font-weight:900;letter-spacing:6px;margin-bottom:4px}
+.config-sub{font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:2px;text-transform:uppercase;margin-bottom:28px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+.field input{width:100%;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#fff;font-size:13px}
+.field input:focus{outline:none;border-color:rgba(255,255,255,0.3)}
+.field input::placeholder{color:rgba(255,255,255,0.18)}
+.config-hint{font-size:10px;color:rgba(255,255,255,0.25);line-height:1.7;margin-bottom:20px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:10px}
+.config-btn{width:100%;padding:14px;border-radius:12px;background:#fff;color:#000;font-weight:700;font-size:13px;letter-spacing:2px;border:none}
+.config-btn:hover{opacity:.9}
+.config-err{font-size:11px;color:#f87171;margin-top:10px;text-align:center;display:none}
+
+/* ── LAYOUT ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(0,0,0,0.85);backdrop-filter:blur(20px);border-bottom:0.5px solid rgba(255,255,255,0.06)}
+.nav-logo{font-family:monospace;font-size:15px;font-weight:900;letter-spacing:5px}
+.nav-badge{font-size:9px;padding:4px 10px;border-radius:999px;background:rgba(74,222,128,0.12);color:#4ade80;border:0.5px solid rgba(74,222,128,0.25);letter-spacing:1.5px;text-transform:uppercase}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-user{font-size:11px;color:rgba(255,255,255,0.4)}
+#main{padding:80px 24px 60px;max-width:1200px;margin:0 auto;display:none}
+
+/* ── STATS BAR ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:rgba(255,255,255,0.06);border-radius:18px;overflow:hidden;border:0.5px solid rgba(255,255,255,0.08);margin-bottom:28px}
+.stat{background:rgba(8,8,8,0.95);padding:20px 18px;text-align:center}
+.stat .sv{font-family:monospace;font-size:24px;font-weight:900}
+.stat .sl{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);margin-top:5px}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;padding:3px;width:fit-content;margin-bottom:24px}
+.tab{padding:9px 22px;border-radius:10px;font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);transition:all .2s;border:none;background:none}
+.tab.on{background:#fff;color:#000}
+.tab-count{display:inline-block;margin-left:6px;background:rgba(255,255,255,0.12);border-radius:999px;font-size:9px;padding:1px 7px;font-weight:700}
+.tab.on .tab-count{background:rgba(0,0,0,0.15);color:#000}
+
+/* ── FILTERS ── */
+.filters{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.filter-select{background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 14px;color:#fff;font-size:12px}
+.filter-select:focus{outline:none}
+.search-input{background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 14px;color:#fff;font-size:12px;width:220px}
+.search-input::placeholder{color:rgba(255,255,255,0.2)}
+.search-input:focus{outline:none;border-color:rgba(255,255,255,0.25)}
+.refresh-btn{padding:9px 18px;border-radius:10px;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);font-size:12px;display:flex;align-items:center;gap:6px;transition:all .2s}
+.refresh-btn:hover{color:#fff;background:rgba(255,255,255,0.1)}
+
+/* ── ORDERS TABLE ── */
+.table-wrap{background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden}
+.table-head{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr 1fr 1.4fr;gap:0;background:rgba(255,255,255,0.04);border-bottom:0.5px solid rgba(255,255,255,0.06);padding:12px 20px}
+.th{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);font-weight:600}
+.order-row{display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr 1fr 1.4fr;gap:0;padding:16px 20px;border-bottom:0.5px solid rgba(255,255,255,0.04);align-items:center;transition:background .2s}
+.order-row:last-child{border-bottom:none}
+.order-row:hover{background:rgba(255,255,255,0.03)}
+.td{font-size:12px;color:rgba(255,255,255,0.7);padding-right:10px}
+.td.bold{font-weight:700;color:#fff;font-family:monospace;font-size:11px}
+.td.name{font-weight:600;color:#fff;font-size:13px}
+.td.price{font-family:monospace;font-weight:700;font-size:14px;color:#fff}
+@media(max-width:860px){
+  .table-head,.order-row{grid-template-columns:1fr 1fr 1fr;}.th:nth-child(n+4),.td:nth-child(n+4){display:none}
+}
+
+/* ── STATUS BADGE ── */
+.status{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.s-awaiting_payment{background:rgba(251,191,36,0.1);color:#fbbf24;border:0.5px solid rgba(251,191,36,0.25)}
+.s-payment_claimed{background:rgba(251,146,60,0.1);color:#fb923c;border:0.5px solid rgba(251,146,60,0.25)}
+.s-verified{background:rgba(74,222,128,0.1);color:#4ade80;border:0.5px solid rgba(74,222,128,0.25)}
+.s-printing{background:rgba(96,165,250,0.1);color:#60a5fa;border:0.5px solid rgba(96,165,250,0.25)}
+.s-shipped{background:rgba(168,85,247,0.1);color:#c084fc;border:0.5px solid rgba(168,85,247,0.25)}
+.s-delivered{background:rgba(52,211,153,0.1);color:#34d399;border:0.5px solid rgba(34,211,153,0.25)}
+.s-cancelled{background:rgba(248,113,113,0.1);color:#f87171;border:0.5px solid rgba(248,113,113,0.25)}
+.s-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ── STATUS DROPDOWN ── */
+.status-sel{background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.12);border-radius:8px;padding:6px 10px;color:#fff;font-size:11px;width:100%}
+.status-sel:focus{outline:none}
+
+/* ── ACTION BUTTONS ── */
+.action-row{display:flex;gap:6px;flex-wrap:wrap}
+.act-btn{padding:6px 12px;border-radius:8px;font-size:10px;font-weight:600;letter-spacing:.5px;border:none;transition:all .2s;white-space:nowrap}
+.act-wa{background:rgba(74,222,128,0.12);color:#4ade80;border:0.5px solid rgba(74,222,128,0.25)}
+.act-wa:hover{background:rgba(74,222,128,0.22)}
+.act-verify{background:rgba(96,165,250,0.12);color:#60a5fa;border:0.5px solid rgba(96,165,250,0.25)}
+.act-verify:hover{background:rgba(96,165,250,0.22)}
+.act-cancel{background:rgba(248,113,113,0.08);color:#f87171;border:0.5px solid rgba(248,113,113,0.2)}
+.act-cancel:hover{background:rgba(248,113,113,0.18)}
+
+/* ── THEME CHIP ── */
+.theme-chip{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600}
+.theme-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── PROFILES TABLE ── */
+.profile-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;padding:15px 20px;border-bottom:0.5px solid rgba(255,255,255,0.04);align-items:center}
+.profile-head{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;background:rgba(255,255,255,0.04);border-bottom:0.5px solid rgba(255,255,255,0.06);padding:12px 20px}
+.profile-link{font-family:monospace;font-size:11px;color:#60a5fa}
+.copy-link{font-size:9px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5)}
+.copy-link:hover{color:#fff}
+@media(max-width:720px){.profile-head,.profile-row{grid-template-columns:1fr 1fr;}.th:nth-child(n+3),.td:nth-child(n+3){display:none}}
+
+/* ── WHATSAPP PANEL ── */
+.wa-panel{background:rgba(74,222,128,0.04);border:0.5px solid rgba(74,222,128,0.18);border-radius:18px;padding:24px;margin-bottom:28px}
+.wa-title{font-size:13px;font-weight:700;color:#4ade80;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.wa-desc{font-size:12px;color:rgba(255,255,255,0.4);line-height:1.7;margin-bottom:18px}
+.wa-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.wa-input{background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.12);border-radius:10px;padding:11px 14px;color:#fff;font-size:13px;flex:1;min-width:200px}
+.wa-input::placeholder{color:rgba(255,255,255,0.2)}
+.wa-input:focus{outline:none;border-color:rgba(74,222,128,0.4)}
+.wa-save{padding:11px 22px;border-radius:10px;background:#4ade80;color:#000;font-weight:700;font-size:12px;border:none}
+.wa-save:hover{opacity:.9}
+.wa-status{font-size:11px;margin-left:4px}
+
+/* ── INVENTORY ── */
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:28px}
+.inv-card{background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px}
+.inv-name{font-size:13px;font-weight:700;margin-bottom:10px}
+.inv-bar-wrap{height:5px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;margin-bottom:6px}
+.inv-bar-fill{height:100%;border-radius:99px}
+.inv-meta{display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.3)}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:56px 24px;color:rgba(255,255,255,0.2)}
+.empty-icon{font-size:36px;margin-bottom:12px}
+.empty-text{font-size:13px;letter-spacing:.5px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(255,255,255,0.08);backdrop-filter:blur(20px);border:0.5px solid rgba(255,255,255,0.15);border-radius:12px;padding:12px 24px;font-size:12px;z-index:999;opacity:0;transition:all .35s;pointer-events:none;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ── LOADING ── */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.6);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{text-align:center;padding:48px;color:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);z-index:500;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-bg.open{display:flex}
+.modal{width:min(480px,96vw);background:#0d0d0d;border:0.5px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:20px}
+.modal-close{float:right;background:none;border:none;color:rgba(255,255,255,0.4);font-size:18px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<!-- CONFIG SCREEN -->
+<div id="config-screen">
+  <div class="config-box">
+    <div class="config-logo">7EVEN</div>
+    <div class="config-sub">Admin Dashboard</div>
+    <div class="config-hint">
+      Enter your Supabase credentials to access the admin panel.<br>
+      Supabase → Project Settings → API → copy URL + service_role key.<br>
+      <strong style="color:#f87171">Use service_role key here (not anon key) — admin only, never share.</strong>
+    </div>
+    <div class="field"><label>Supabase Project URL</label><input id="cfgUrl" placeholder="https://xxxx.supabase.co" type="url"></div>
+    <div class="field"><label>Service Role Key (admin key)</label><input id="cfgKey" placeholder="eyJhbGci..." type="password"></div>
+    <div class="field"><label>Admin Password (set any password to protect this page)</label><input id="cfgPwd" placeholder="Choose a password" type="password"></div>
+    <button class="config-btn" onclick="saveConfig()">ENTER DASHBOARD →</button>
+    <div class="config-err" id="cfgErr">Wrong password or invalid keys.</div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav style="display:none" id="navbar">
+  <div class="nav-logo">7EVEN <span style="font-size:10px;color:rgba(255,255,255,0.3);letter-spacing:2px">ADMIN</span></div>
+  <div class="nav-right">
+    <span class="nav-badge">● LIVE</span>
+    <span class="nav-user" id="navTime"></span>
+    <button onclick="logout()" style="font-size:11px;color:rgba(255,255,255,0.35);background:none;border:none;cursor:pointer;padding:6px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1)">Logout</button>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- STATS -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat"><div class="sv" id="st-total">—</div><div class="sl">Total Orders</div></div>
+    <div class="stat"><div class="sv" id="st-pending" style="color:#fb923c">—</div><div class="sl">Awaiting Verify</div></div>
+    <div class="stat"><div class="sv" id="st-verified" style="color:#4ade80">—</div><div class="sl">Verified</div></div>
+    <div class="stat"><div class="sv" id="st-shipped" style="color:#c084fc">—</div><div class="sl">Shipped</div></div>
+    <div class="stat"><div class="sv" id="st-revenue" style="color:#fff">—</div><div class="sl">Revenue (₹)</div></div>
+    <div class="stat"><div class="sv" id="st-profiles">—</div><div class="sl">Profiles Created</div></div>
+  </div>
+
+  <!-- WHATSAPP PANEL -->
+  <div class="wa-panel">
+    <div class="wa-title">💬 WhatsApp Notifications</div>
+    <div class="wa-desc">Enter your WhatsApp number. Every new order will automatically send you a WhatsApp message via wa.me link. When you click Verify Payment below, a pre-filled WhatsApp message is sent to the customer.</div>
+    <div class="wa-row">
+      <input class="wa-input" id="waNumber" placeholder="Your WhatsApp number e.g. 919876543210" type="tel">
+      <button class="wa-save" onclick="saveWA()">Save Number</button>
+      <span class="wa-status" id="waStatus"></span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab on" onclick="setTab('orders')" id="tab-orders">Orders <span class="tab-count" id="cnt-orders">0</span></button>
+    <button class="tab" onclick="setTab('profiles')" id="tab-profiles">Profiles <span class="tab-count" id="cnt-profiles">0</span></button>
+    <button class="tab" onclick="setTab('inventory')" id="tab-inventory">Inventory</button>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters" id="filterBar">
+    <input class="search-input" id="searchInput" placeholder="Search name, email, theme..." oninput="filterRows()">
+    <select class="filter-select" id="statusFilter" onchange="filterRows()">
+      <option value="">All statuses</option>
+      <option value="awaiting_payment">Awaiting Payment</option>
+      <option value="payment_claimed">Payment Claimed</option>
+      <option value="verified">Verified</option>
+      <option value="printing">Printing</option>
+      <option value="shipped">Shipped</option>
+      <option value="delivered">Delivered</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <button class="refresh-btn" onclick="loadAll()"><span id="refIcon">↻</span> Refresh</button>
+  </div>
+
+  <!-- ORDERS TAB -->
+  <div id="tab-content-orders">
+    <div class="table-wrap">
+      <div class="table-head">
+        <div class="th">Customer</div>
+        <div class="th">Theme</div>
+        <div class="th">Amount</div>
+        <div class="th">Status</div>
+        <div class="th">Date</div>
+        <div class="th">Actions</div>
+      </div>
+      <div id="ordersBody"><div class="loading-row"><div class="spinner"></div> Loading orders...</div></div>
+    </div>
+  </div>
+
+  <!-- PROFILES TAB -->
+  <div id="tab-content-profiles" style="display:none">
+    <div class="table-wrap">
+      <div class="profile-head">
+        <div class="th">Name</div>
+        <div class="th">Profile Link</div>
+        <div class="th">Links Added</div>
+        <div class="th">Joined</div>
+      </div>
+      <div id="profilesBody"><div class="loading-row"><div class="spinner"></div> Loading profiles...</div></div>
+    </div>
+  </div>
+
+  <!-- INVENTORY TAB -->
+  <div id="tab-content-inventory" style="display:none">
+    <div class="inv-grid" id="invGrid"><div class="loading-row"><div class="spinner"></div></div></div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── CONFIG & AUTH ── */
+const ADMIN_PWD_KEY='7even_admin_pwd';
+const ADMIN_URL_KEY='7even_sb_url';
+const ADMIN_KEY_KEY='7even_sb_key';
+const WA_NUM_KEY='7even_wa_num';
+const THEMES_META={
+ 'iron-man':{name:'Iron Man',color:'#E84040'},
+ 'spider-man':{name:'Spider-Man',color:'#E74C3C'},
+ 'black-panther':{name:'Black Panther',color:'#9B59B6'},
+ 'thor':{name:'Thor',color:'#2980B9'},
+ 'dr-strange':{name:'Dr. Strange',color:'#1ABC9C'},
+};
+const STATUS_PIPELINE=['awaiting_payment','payment_claimed','verified','printing','shipped','delivered'];
+let sb=null, allOrders=[], allProfiles=[], currentTab='orders', waNumber='';
+
+function saveConfig(){
+ const url=document.getElementById('cfgUrl').value.trim();
+ const key=document.getElementById('cfgKey').value.trim();
+ const pwd=document.getElementById('cfgPwd').value.trim();
+ const err=document.getElementById('cfgErr');
+ if(!url||!key||!pwd){err.textContent='All fields required.';err.style.display='block';return;}
+ const stored=localStorage.getItem(ADMIN_PWD_KEY);
+ if(stored&&stored!==pwd){err.textContent='Wrong password.';err.style.display='block';return;}
+ localStorage.setItem(ADMIN_PWD_KEY,pwd);
+ localStorage.setItem(ADMIN_URL_KEY,url);
+ localStorage.setItem(ADMIN_KEY_KEY,key);
+ initAdmin(url,key);
+}
+
+function checkStored(){
+ const url=localStorage.getItem(ADMIN_URL_KEY);
+ const key=localStorage.getItem(ADMIN_KEY_KEY);
+ const pwd=localStorage.getItem(ADMIN_PWD_KEY);
+ if(url&&key&&pwd){
+  document.getElementById('cfgUrl').value=url;
+  document.getElementById('cfgKey').value=key;
+  document.getElementById('cfgPwd').value=pwd;
+  initAdmin(url,key);
+ }
+}
+
+function logout(){
+ localStorage.removeItem(ADMIN_URL_KEY);
+ localStorage.removeItem(ADMIN_KEY_KEY);
+ localStorage.removeItem(ADMIN_PWD_KEY);
+ location.reload();
+}
+
+function initAdmin(url,key){
+ try{
+  sb=supabase.createClient(url,key);
+  document.getElementById('config-screen').style.display='none';
+  document.getElementById('navbar').style.display='flex';
+  document.getElementById('main').style.display='block';
+  waNumber=localStorage.getItem(WA_NUM_KEY)||'';
+  if(waNumber)document.getElementById('waNumber').value=waNumber;
+  updateClock();setInterval(updateClock,30000);
+  loadAll();
+  startRealtime();
+ }catch(e){document.getElementById('cfgErr').textContent='Invalid credentials.';document.getElementById('cfgErr').style.display='block';}
+}
+
+function updateClock(){document.getElementById('navTime').textContent=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
+
+/* ── REALTIME ── */
+function startRealtime(){
+ if(!sb)return;
+ sb.channel('admin-orders').on('postgres_changes',{event:'*',schema:'public',table:'orders'},payload=>{
+  loadAll();
+  if(payload.eventType==='INSERT'){
+   const o=payload.new;
+   toast('🆕 New order! '+o.theme_id+' · ₹'+o.amount_inr);
+   sendWANotification(o,'new');
+  }
+ }).subscribe();
+}
+
+/* ── LOAD DATA ── */
+async function loadAll(){
+ const icon=document.getElementById('refIcon');
+ icon.style.animation='spin 0.7s linear infinite';
+ await Promise.all([loadOrders(),loadProfiles(),loadInventory()]);
+ icon.style.animation='';
+}
+
+async function loadOrders(){
+ const{data,error}=await sb.from('orders')
+  .select(`*, profiles(full_name,slug)`)
+  .order('created_at',{ascending:false});
+ if(error){renderOrdersError(error.message);return;}
+ allOrders=data||[];
+ updateStats();
+ document.getElementById('cnt-orders').textContent=allOrders.length;
+ filterRows();
+}
+
+async function loadProfiles(){
+ const{data,error}=await sb.from('profiles')
+  .select('full_name,slug,title,links,extra_links,created_at')
+  .order('created_at',{ascending:false});
+ if(error)return;
+ allProfiles=data||[];
+ document.getElementById('cnt-profiles').textContent=allProfiles.length;
+ document.getElementById('st-profiles').textContent=allProfiles.length;
+ renderProfiles();
+}
+
+async function loadInventory(){
+ const{data}=await sb.from('themes').select('*').order('price_inr');
+ if(!data)return;
+ document.getElementById('invGrid').innerHTML=data.map(t=>{
+  const rem=t.total-t.sold,pct=(rem/t.total)*100;
+  const m=THEMES_META[t.id]||{name:t.name,color:'#fff'};
+  return `<div class="inv-card">
+   <div class="inv-name" style="color:${m.color}">${m.name}</div>
+   <div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:10px">${t.tag||''} · ${t.rarity||''}</div>
+   <div class="inv-bar-wrap"><div class="inv-bar-fill" style="width:${pct}%;background:${m.color}"></div></div>
+   <div class="inv-meta"><span>${rem} / ${t.total} left</span><span>₹${t.price_inr}</span></div>
+   <div style="font-size:9px;color:rgba(255,255,255,0.2);margin-top:8px">${t.sold} claimed</div>
+  </div>`;
+ }).join('');
+}
+
+/* ── STATS ── */
+function updateStats(){
+ const total=allOrders.length;
+ const pending=allOrders.filter(o=>o.status==='payment_claimed').length;
+ const verified=allOrders.filter(o=>o.status==='verified').length;
+ const shipped=allOrders.filter(o=>o.status==='shipped').length;
+ const revenue=allOrders.filter(o=>!['awaiting_payment','cancelled'].includes(o.status)).reduce((a,o)=>a+o.amount_inr,0);
+ document.getElementById('st-total').textContent=total;
+ document.getElementById('st-pending').textContent=pending;
+ document.getElementById('st-verified').textContent=verified;
+ document.getElementById('st-shipped').textContent=shipped;
+ document.getElementById('st-revenue').textContent='₹'+revenue.toLocaleString('en-IN');
+}
+
+/* ── RENDER ORDERS ── */
+function filterRows(){
+ const q=(document.getElementById('searchInput').value||'').toLowerCase();
+ const st=document.getElementById('statusFilter').value;
+ const filtered=allOrders.filter(o=>{
+  const name=(o.profiles?.full_name||'').toLowerCase();
+  const slug=(o.profiles?.slug||'').toLowerCase();
+  const theme=(o.theme_id||'').toLowerCase();
+  const matchQ=!q||name.includes(q)||slug.includes(q)||theme.includes(q);
+  const matchS=!st||o.status===st;
+  return matchQ&&matchS;
+ });
+ renderOrders(filtered);
+}
+
+function renderOrders(orders){
+ if(!orders.length){
+  document.getElementById('ordersBody').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">No orders found</div></div>';
+  return;
+ }
+ document.getElementById('ordersBody').innerHTML=orders.map(o=>{
+  const m=THEMES_META[o.theme_id]||{name:o.theme_id,color:'#fff'};
+  const name=o.profiles?.full_name||'Unknown';
+  const slug=o.profiles?.slug||'';
+  const date=new Date(o.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+  const sOpts=STATUS_PIPELINE.map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s.replace(/_/g,' ')}</option>`).join('')+`<option value="cancelled" ${o.status==='cancelled'?'selected':''}>cancelled</option>`;
+  return `<div class="order-row" id="row-${o.id}">
+   <div class="td">
+    <div class="name">${name}</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.3);margin-top:2px;font-family:monospace">${slug?'7even.online/'+slug:''}</div>
+   </div>
+   <div class="td"><span class="theme-chip"><span class="theme-dot" style="background:${m.color}"></span>${m.name}</span></div>
+   <div class="td price">₹${o.amount_inr}</div>
+   <div class="td">
+    <select class="status-sel" onchange="updateStatus('${o.id}',this.value,'${slug}','${name}','${o.amount_inr}','${o.theme_id}')">${sOpts}</select>
+   </div>
+   <div class="td" style="font-size:10px;color:rgba(255,255,255,0.4)">${date}</div>
+   <div class="td">
+    <div class="action-row">
+     <button class="act-btn act-wa" onclick="openWA('${slug}','${name}','${o.theme_id}','${o.status}','${o.amount_inr}')">💬 WhatsApp</button>
+     ${o.status==='payment_claimed'?`<button class="act-btn act-verify" onclick="quickVerify('${o.id}','${slug}','${name}','${o.theme_id}','${o.amount_inr}')">✅ Verify</button>`:''}
+    </div>
+   </div>
+  </div>`;
+ }).join('');
+}
+
+function renderOrdersError(msg){
+ document.getElementById('ordersBody').innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">${msg}</div></div>`;
+}
+
+/* ── RENDER PROFILES ── */
+function renderProfiles(){
+ if(!allProfiles.length){
+  document.getElementById('profilesBody').innerHTML='<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">No profiles yet</div></div>';
+  return;
+ }
+ document.getElementById('profilesBody').innerHTML=allProfiles.map(p=>{
+  const linksCount=Object.values(p.links||{}).filter(Boolean).length+(p.extra_links||[]).length;
+  const date=new Date(p.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+  return `<div class="profile-row">
+   <div class="td name">${p.full_name||'—'}<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px">${p.title||''}</div></div>
+   <div class="td"><span class="profile-link">7even.online/${p.slug}</span> <button class="copy-link" onclick="copyTxt('https://7even.online/${p.slug}')">copy</button></div>
+   <div class="td" style="font-size:12px;color:rgba(255,255,255,0.5)">${linksCount} link${linksCount!==1?'s':''}</div>
+   <div class="td" style="font-size:11px;color:rgba(255,255,255,0.3)">${date}</div>
+  </div>`;
+ }).join('');
+}
+
+/* ── STATUS UPDATE ── */
+async function updateStatus(id,status,slug,name,amount,themeId){
+ const{error}=await sb.from('orders').update({status}).eq('id',id);
+ if(error){toast('❌ Update failed: '+error.message);return;}
+ const idx=allOrders.findIndex(o=>o.id===id);
+ if(idx!==-1)allOrders[idx].status=status;
+ toast('✅ Status → '+status.replace(/_/g,' '));
+ updateStats();
+ if(status==='shipped'){
+  const waMsg=`Hello ${name}! 🎉 Your 7EVEN ${THEMES_META[themeId]?.name||themeId} NFC card has been shipped! Track your order at 7even.online/${slug} Your card will arrive in 2-3 business days. – Team 7EVEN`;
+  if(waNumber)window.open('https://wa.me/'+waNumber+'?text='+encodeURIComponent('[CUSTOMER SHIPPED]\n'+name+' · 7even.online/'+slug+'\nTheme: '+(THEMES_META[themeId]?.name||themeId)+'\n\nCustomer WA message (send to them):\n'+waMsg));
+ }
+}
+
+async function quickVerify(id,slug,name,themeId,amount){
+ await updateStatus(id,'verified',slug,name,amount,themeId);
+ await loadOrders();
+ const waMsg=`Hello ${name}! ✅ Your payment of ₹${amount} for the 7EVEN ${THEMES_META[themeId]?.name||themeId} Edition NFC card has been verified! We are now preparing your card for printing. You will receive a shipping update soon. Set up your profile at 7even.online/${slug} – Team 7EVEN`;
+ if(waNumber){
+  setTimeout(()=>window.open('https://wa.me/'+waNumber+'?text='+encodeURIComponent('[PAYMENT VERIFIED ✅]\nCustomer: '+name+'\nProfile: 7even.online/'+slug+'\nTheme: '+(THEMES_META[themeId]?.name||themeId)+'\nAmount: ₹'+amount+'\n\n--- Send this to customer ---\n'+waMsg)),300);
+ }
+}
+
+/* ── WHATSAPP ── */
+function saveWA(){
+ const num=document.getElementById('waNumber').value.trim().replace(/\D/g,'');
+ if(!num||num.length<10){toast('❌ Enter a valid number with country code');return;}
+ waNumber=num;
+ localStorage.setItem(WA_NUM_KEY,num);
+ document.getElementById('waStatus').textContent='✅ Saved';
+ toast('WhatsApp number saved: +'+num);
+ setTimeout(()=>document.getElementById('waStatus').textContent='',2000);
+}
+
+function sendWANotification(order,type){
+ if(!waNumber)return;
+ const m=THEMES_META[order.theme_id]||{name:order.theme_id};
+ const msg=type==='new'
+  ?`🆕 NEW ORDER on 7EVEN!\nTheme: ${m.name}\nAmount: ₹${order.amount_inr}\nTime: ${new Date().toLocaleTimeString('en-IN')}\n\nCheck dashboard: 7even.online/admin`
+  :`✅ Payment claimed!\nTheme: ${m.name}\nAmount: ₹${order.amount_inr}`;
+ setTimeout(()=>window.open('https://wa.me/'+waNumber+'?text='+encodeURIComponent(msg)),500);
+}
+
+function openWA(slug,name,themeId,status,amount){
+ if(!waNumber){toast('Set your WhatsApp number above first');return;}
+ const m=THEMES_META[themeId]?.name||themeId;
+ const msgs={
+  awaiting_payment:`Hello ${name}! 👋 We noticed you started an order for the 7EVEN ${m} NFC card (₹${amount}). Complete your payment by UPI to 7even@upi and click I've Paid on the website. 7even.online – Team 7EVEN`,
+  payment_claimed:`Hello ${name}! 🔄 We received your payment claim for the 7EVEN ${m} card. We are verifying it now. Usually takes 2-4 hours. – Team 7EVEN`,
+  verified:`Hello ${name}! ✅ Payment verified! Your ${m} card is confirmed and going to print. Set up your profile: 7even.online/${slug} – Team 7EVEN`,
+  printing:`Hello ${name}! 🖨️ Your 7EVEN ${m} card is being printed! Your permanent link is ready: 7even.online/${slug} – Team 7EVEN`,
+  shipped:`Hello ${name}! 🚚 Your 7EVEN ${m} card is on its way! Should arrive in 2-3 business days. Profile: 7even.online/${slug} – Team 7EVEN`,
+  delivered:`Hello ${name}! 🎉 Hope you received your 7EVEN ${m} NFC card! Tap it to open your profile: 7even.online/${slug} Share it everywhere! – Team 7EVEN`,
+ };
+ const msg=msgs[status]||`Hello ${name}! Your 7EVEN order update. Check 7even.online/${slug}`;
+ window.open('https://wa.me/'+waNumber+'?text='+encodeURIComponent(msg));
+}
+
+/* ── TABS ── */
+function setTab(t){
+ currentTab=t;
+ ['orders','profiles','inventory'].forEach(x=>{
+  document.getElementById('tab-content-'+x).style.display=x===t?'block':'none';
+  document.getElementById('tab-'+x).classList.toggle('on',x===t);
+ });
+ document.getElementById('filterBar').style.display=t==='orders'?'flex':'none';
+}
+
+/* ── UTILS ── */
+function toast(m){const el=document.getElementById('toast');el.textContent=m;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
+function copyTxt(s){navigator.clipboard&&navigator.clipboard.writeText(s);toast('Copied: '+s);}
+
+/* ── INIT ── */
+checkStored();
+</script>
+</body>
+</html>
